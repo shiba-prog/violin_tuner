@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Precision Web Tuner</title>
+    
+    <!-- iPhone / PWA Meta tags for Home Screen addition -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Web Tuner">
+    <link rel="apple-touch-icon" href="https://placehold.co/192x192/1e293b/4ade80?text=🎵">
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=JetBrains+Mono:wght@700&display=swap');
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0f172a; /* Slate 900 */
+            touch-action: manipulation;
+        }
+        
+        .font-mono-num {
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .glow-green { text-shadow: 0 0 25px rgba(34, 197, 94, 0.8); color: #4ade80; }
+        .glow-yellow { text-shadow: 0 0 25px rgba(234, 179, 8, 0.8); color: #facc15; }
+        .glow-red { text-shadow: 0 0 25px rgba(239, 68, 68, 0.8); color: #f87171; }
+        .glow-gray { text-shadow: none; color: #94a3b8; }
+
+        .needle-green { background-color: #22c55e; box-shadow: 0 0 15px rgba(34, 197, 94, 1); }
+        .needle-yellow { background-color: #eab308; box-shadow: 0 0 15px rgba(234, 179, 8, 1); }
+        .needle-red { background-color: #ef4444; box-shadow: 0 0 15px rgba(239, 68, 68, 1); }
+        .needle-gray { background-color: #64748b; box-shadow: none; }
+        
+        #needle {
+            transition: left 0.1s ease-out, background-color 0.2s, box-shadow 0.2s;
+        }
+    </style>
+</head>
+<body class="text-slate-100 flex flex-col items-center justify-start min-h-screen p-3 pb-8">
+
+    <!-- Error Toast Notification -->
+    <div id="error-message" class="hidden absolute top-4 bg-red-600/95 backdrop-blur-sm text-white px-5 py-2.5 rounded-xl shadow-2xl font-semibold border border-red-500 z-50 text-center max-w-xs text-sm"></div>
+
+    <!-- Main Container -->
+    <div class="w-full max-w-md bg-slate-800/60 backdrop-blur-md rounded-3xl shadow-2xl border border-slate-700/80 p-4 sm:p-6 flex flex-col items-center relative overflow-hidden my-auto">
+        
+        <!-- Background decorative accents -->
+        <div class="absolute -top-32 -left-32 w-64 h-64 bg-blue-500/15 rounded-full blur-3xl pointer-events-none"></div>
+        <div class="absolute -bottom-32 -right-32 w-64 h-64 bg-purple-500/15 rounded-full blur-3xl pointer-events-none"></div>
+
+        <h1 class="text-xs sm:text-sm font-bold text-slate-400 mb-3 tracking-widest uppercase">Precision Web Tuner</h1>
+
+        <!-- Top Section: Note Display & Enlarged Clear Live Waveform side-by-side -->
+        <div class="w-full grid grid-cols-2 gap-3 items-center mb-4 bg-slate-900/50 p-3.5 rounded-2xl border border-slate-700/50">
+            <!-- Left: Note Display Circle -->
+            <div class="flex flex-col items-center justify-center">
+                <div class="relative w-28 h-28 sm:w-32 sm:h-32 flex items-center justify-center bg-slate-900 rounded-full border-4 border-slate-700 shadow-inner">
+                    <div id="note-display" class="text-4xl sm:text-5xl font-extrabold glow-gray transition-colors duration-300 flex items-baseline">
+                        --
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right: Live Waveform Preview (Clear & Optimized for iPhone) -->
+            <div class="flex flex-col justify-center">
+                <div class="flex justify-between items-center mb-1">
+                    <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Live Waveform</span>
+                </div>
+                <canvas id="waveform-canvas" class="w-full h-24 rounded-xl bg-slate-950 border border-slate-800/80 shadow-inner"></canvas>
+            </div>
+        </div>
+
+        <!-- Pitch and Cents numerical text output -->
+        <div class="flex flex-col items-center mb-4 space-y-0.5">
+            <div id="freq-display" class="text-2xl sm:text-3xl font-mono-num font-bold text-slate-200">---.-- <span class="text-base sm:text-lg text-slate-500">Hz</span></div>
+            <div id="cents-display" class="text-base font-semibold text-slate-400">+0.00 cents</div>
+            <div id="string-guide" class="text-xs font-bold text-emerald-400 h-4 mt-0.5 transition-opacity duration-300 opacity-0">🎻 Violin A-String</div>
+        </div>
+
+        <!-- Needle Meter Display -->
+        <div class="w-full relative mb-4">
+            <div class="h-10 bg-slate-900 rounded-xl border border-slate-700 shadow-inner overflow-hidden flex items-center justify-center relative">
+                <div class="absolute inset-0 bg-gradient-to-r from-red-500/10 via-green-500/20 to-red-500/10"></div>
+                
+                <div class="absolute inset-0 flex justify-between px-5 items-end pb-1.5 opacity-60">
+                    <div class="w-0.5 h-2.5 bg-slate-500"></div>
+                    <div class="w-px h-1 bg-slate-600"></div>
+                    <div class="w-px h-1 bg-slate-600"></div>
+                    <div class="w-px h-1 bg-slate-600"></div>
+                    <div class="w-px h-1 bg-slate-600"></div>
+                    <div class="w-0.5 h-4 bg-slate-300"></div>
+                    <div class="w-px h-1 bg-slate-600"></div>
+                    <div class="w-px h-1 bg-slate-600"></div>
+                    <div class="w-px h-1 bg-slate-600"></div>
+                    <div class="w-px h-1 bg-slate-600"></div>
+                    <div class="w-0.5 h-2.5 bg-slate-500"></div>
+                </div>
+
+                <div id="needle" class="absolute top-0 bottom-0 w-1.5 needle-gray rounded-full z-10" style="left: 50%; transform: translateX(-50%);"></div>
+            </div>
+            
+            <div class="flex justify-between w-full mt-1.5 text-[11px] font-semibold text-slate-400 px-2">
+                <span>♭ Flat</span>
+                <span class="text-emerald-400">In Tune</span>
+                <span>♯ Sharp</span>
+            </div>
+        </div>
+
+        <!-- History Graph (Time & Cents variation) -->
+        <div class="w-full mb-4 bg-slate-900/70 p-3 rounded-2xl border border-slate-700/60 shadow-inner">
+            <div class="flex justify-between items-center mb-1">
+                <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Pitch History Graph</span>
+                <span id="history-status" class="text-[10px] text-emerald-400 font-mono-num">Realtime Track</span>
+            </div>
+            <canvas id="history-canvas" class="w-full h-16 rounded-lg bg-slate-950 border border-slate-800"></canvas>
+        </div>
+
+        <!-- Reference Pitch (A4) Customizer -->
+        <div class="w-full mb-4 p-3 bg-slate-900/50 rounded-2xl border border-slate-700/50">
+            <div class="flex justify-between items-center mb-1.5">
+                <label for="a4-slider" class="text-xs font-semibold text-slate-300">Reference Pitch (A4)</label>
+                <div class="flex items-center text-xs text-slate-300">
+                    <input type="number" id="a4-input" min="410" max="470" value="440" class="w-12 bg-slate-800 text-white rounded p-1 text-center font-mono-num border border-slate-600 focus:outline-none focus:border-blue-500 mr-1 text-xs">
+                    <span>Hz</span>
+                </div>
+            </div>
+            <input type="range" id="a4-slider" min="410" max="470" value="440" step="1" class="w-full accent-blue-500 cursor-pointer h-1.5 bg-slate-700 rounded-lg appearance-none">
+        </div>
+
+        <!-- Mute (消音器) Practice Mode Toggle -->
+        <div class="w-full mb-4 p-3 bg-slate-900/50 rounded-2xl border border-slate-700/50 flex justify-between items-center">
+            <div class="flex flex-col">
+                <span class="text-xs font-semibold text-slate-200 flex items-center gap-1">
+                    🔇 消音器 (ミュート) モード
+                </span>
+                <span class="text-[10px] text-slate-400">かすかな音量・倍音変化を高感度検出</span>
+            </div>
+            <label class="relative inline-flex items-center cursor-pointer">
+                <input type="checkbox" id="mute-mode-toggle" class="sr-only peer">
+                <div class="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
+            </label>
+        </div>
+
+        <!-- Start / Stop Button -->
+        <button id="toggle-btn" class="w-full py-3.5 bg-blue-600 hover:bg-blue-500 text-white rounded-2xl font-bold text-base shadow-lg shadow-blue-900/25 transition-all duration-200 active:scale-[0.98]">
+            Start Tuning
+        </button>
+    </div>
+
+    <script>
+        const noteStrings = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+        
+        let audioContext = null;
+        let analyser = null;
+        let mediaStreamSource = null;
+        let gainNode = null;
+        let compressorNode = null;
+        let isPlaying = false;
+        let isMuteMode = false;
+        let rafId = null;
+        let a4Frequency = 440.0;
+        let lastPitchTime = 0;
+
+        const BUFF_SIZE = 2048;
+        let buf = new Float32Array(BUFF_SIZE);
+        let timeDomainData = new Uint8Array(BUFF_SIZE);
+
+        const historyMax = 120;
+        let pitchHistory = new Array(historyMax).fill(null);
+
+        const els = {
+            note: document.getElementById('note-display'),
+            freq: document.getElementById('freq-display'),
+            cents: document.getElementById('cents-display'),
+            needle: document.getElementById('needle'),
+            a4Slider: document.getElementById('a4-slider'),
+            a4Input: document.getElementById('a4-input'),
+            muteToggle: document.getElementById('mute-mode-toggle'),
+            toggleBtn: document.getElementById('toggle-btn'),
+            errorMsg: document.getElementById('error-message'),
+            stringGuide: document.getElementById('string-guide'),
+            waveformCanvas: document.getElementById('waveform-canvas'),
+            historyCanvas: document.getElementById('history-canvas')
+        };
+
+        function setupCanvases() {
+            [els.waveformCanvas, els.historyCanvas].forEach(canvas => {
+                const rect = canvas.getBoundingClientRect();
+                canvas.width = rect.width * window.devicePixelRatio;
+                canvas.height = rect.height * window.devicePixelRatio;
+            });
+        }
+        window.addEventListener('resize', setupCanvases);
+        setupCanvases();
+
+        const waveCtx = els.waveformCanvas.getContext('2d');
+        const histCtx = els.historyCanvas.getContext('2d');
+
+        function autoCorrelate(buf, sampleRate) {
+            let SIZE = buf.length;
+
+            // DC Offset removal (直流成分を除去して小さな音の検出精度向上)
+            let mean = 0;
+            for (let i = 0; i < SIZE; i++) mean += buf[i];
+            mean /= SIZE;
+            for (let i = 0; i < SIZE; i++) buf[i] -= mean;
+
+            let rms = 0;
+            for (let i = 0; i < SIZE; i++) {
+                let val = buf[i];
+                rms += val * val;
+            }
+            rms = Math.sqrt(rms / SIZE);
+
+            // ミュートモード時は検出閾値をさらに引き下げ
+            const minRms = isMuteMode ? 0.0008 : 0.003;
+            if (rms < minRms) return -1;
+
+            let c = new Array(SIZE).fill(0);
+            for (let i = 0; i < SIZE; i++)
+                for (let j = 0; j < SIZE - i; j++)
+                    c[i] = c[i] + buf[j] * buf[j + i];
+
+            let d = 0; while (c[d] > c[d + 1]) d++;
+            let maxval = -1, maxpos = -1;
+            for (let i = d; i < SIZE; i++) {
+                if (c[i] > maxval) {
+                    maxval = c[i];
+                    maxpos = i;
+                }
+            }
+            let T0 = maxpos;
+
+            let x1 = c[T0 - 1], x2 = c[T0], x3 = c[T0 + 1];
+            let a = (x1 + x3 - 2 * x2) / 2;
+            let b = (x3 - x1) / 2;
+            if (a) T0 = T0 - b / (2 * a);
+
+            return sampleRate / T0;
+        }
+
+        function noteFromPitch(frequency) {
+            let noteNum = 12 * (Math.log(frequency / a4Frequency) / Math.log(2));
+            return Math.round(noteNum) + 69;
+        }
+
+        function frequencyFromNoteNumber(note) {
+            return a4Frequency * Math.pow(2, (note - 69) / 12);
+        }
+
+        function centsOffFromPitch(frequency, note) {
+            return (1200 * Math.log(frequency / frequencyFromNoteNumber(note)) / Math.log(2));
+        }
+
+        function showError(message) {
+            els.errorMsg.innerText = message;
+            els.errorMsg.classList.remove('hidden');
+            setTimeout(() => {
+                els.errorMsg.classList.add('hidden');
+            }, 5000);
+        }
+
+        function drawWaveform() {
+            const width = els.waveformCanvas.width;
+            const height = els.waveformCanvas.height;
+
+            waveCtx.fillStyle = '#020617';
+            waveCtx.fillRect(0, 0, width, height);
+
+            if (!isPlaying) {
+                waveCtx.strokeStyle = '#334155';
+                waveCtx.lineWidth = 2;
+                waveCtx.beginPath();
+                waveCtx.moveTo(0, height / 2);
+                waveCtx.lineTo(width, height / 2);
+                waveCtx.stroke();
+                return;
+            }
+
+            analyser.getByteTimeDomainData(timeDomainData);
+
+            waveCtx.lineWidth = 2;
+            waveCtx.strokeStyle = '#38bdf8';
+            waveCtx.beginPath();
+
+            let sliceWidth = width * 1.0 / BUFF_SIZE;
+            let x = 0;
+
+            for (let i = 0; i < BUFF_SIZE; i++) {
+                let v = timeDomainData[i] / 128.0;
+                let y = v * height / 2;
+
+                if (i === 0) {
+                    waveCtx.moveTo(x, y);
+                } else {
+                    waveCtx.lineTo(x, y);
+                }
+
+                x += sliceWidth;
+            }
+
+            waveCtx.lineTo(width, height / 2);
+            waveCtx.stroke();
+        }
+
+        function drawHistoryGraph(currentCents, hasSignal) {
+            const width = els.historyCanvas.width;
+            const height = els.historyCanvas.height;
+
+            pitchHistory.shift();
+            pitchHistory.push(hasSignal ? Math.max(-50, Math.min(50, currentCents)) : null);
+
+            histCtx.fillStyle = '#020617';
+            histCtx.fillRect(0, 0, width, height);
+
+            histCtx.strokeStyle = 'rgba(51, 65, 85, 0.6)';
+            histCtx.lineWidth = 1;
+            histCtx.setLineDash([3, 3]);
+            histCtx.beginPath();
+            histCtx.moveTo(0, height / 2);
+            histCtx.lineTo(width, height / 2);
+            histCtx.stroke();
+            histCtx.setLineDash([]);
+
+            histCtx.lineWidth = 2;
+            histCtx.strokeStyle = '#34d399';
+            histCtx.beginPath();
+
+            let step = width / (historyMax - 1);
+            let drawing = false;
+
+            for (let i = 0; i < historyMax; i++) {
+                let val = pitchHistory[i];
+                if (val === null) {
+                    drawing = false;
+                    continue;
+                }
+
+                let y = height / 2 - (val / 50) * (height * 0.45);
+                let x = i * step;
+
+                if (!drawing) {
+                    histCtx.moveTo(x, y);
+                    drawing = true;
+                } else {
+                    histCtx.lineTo(x, y);
+                }
+            }
+            histCtx.stroke();
+        }
+
+        function updatePitch() {
+            if (!isPlaying) return;
+
+            analyser.getFloatTimeDomainData(buf);
+            let ac = autoCorrelate(buf, audioContext.sampleRate);
+
+            drawWaveform();
+
+            if (ac !== -1) {
+                lastPitchTime = Date.now();
+                let pitch = ac;
+                let note = noteFromPitch(pitch);
+                let cents = centsOffFromPitch(pitch, note);
+                
+                let octave = Math.floor(note / 12) - 1;
+                let noteIndex = note % 12;
+                if (noteIndex < 0) noteIndex += 12;
+
+                els.freq.innerHTML = `${pitch.toFixed(2)} <span class="text-base sm:text-lg text-slate-500">Hz</span>`;
+                els.note.innerHTML = `${noteStrings[noteIndex]}<span class="text-xl sm:text-2xl ml-0.5 -translate-y-2 opacity-70">${octave}</span>`;
+                els.cents.innerText = `${cents > 0 ? '+' : ''}${cents.toFixed(2)} cents`;
+
+                // Violin String Guide Detection
+                let stringName = "";
+                if (note === 55) stringName = "🎻 Violin G-String (G3)";
+                else if (note === 62) stringName = "🎻 Violin D-String (D4)";
+                else if (note === 69) stringName = "🎻 Violin A-String (A4)";
+                else if (note === 76) stringName = "🎻 Violin E-String (E5)";
+
+                if (stringName) {
+                    els.stringGuide.innerText = stringName;
+                    els.stringGuide.classList.remove('opacity-0');
+                    els.stringGuide.classList.add('opacity-100');
+                } else {
+                    els.stringGuide.classList.remove('opacity-100');
+                    els.stringGuide.classList.add('opacity-0');
+                }
+
+                let percentage = 50 + cents;
+                percentage = Math.max(0, Math.min(100, percentage));
+                els.needle.style.left = `${percentage}%`;
+
+                els.note.className = 'text-4xl sm:text-5xl font-extrabold flex items-baseline transition-colors duration-100 ';
+                els.needle.className = 'absolute top-0 bottom-0 w-1.5 rounded-full z-10 ';
+
+                if (Math.abs(cents) <= 5) {
+                    els.note.classList.add('glow-green');
+                    els.needle.classList.add('needle-green');
+                } else if (Math.abs(cents) <= 15) {
+                    els.note.classList.add('glow-yellow');
+                    els.needle.classList.add('needle-yellow');
+                } else {
+                    els.note.classList.add('glow-red');
+                    els.needle.classList.add('needle-red');
+                }
+
+                drawHistoryGraph(cents, true);
+
+            } else {
+                drawHistoryGraph(0, false);
+
+                if (Date.now() - lastPitchTime > 1000) {
+                    els.note.innerHTML = "--";
+                    els.note.className = 'text-4xl sm:text-5xl font-extrabold flex items-baseline transition-colors duration-300 glow-gray';
+                    els.freq.innerHTML = `---.-- <span class="text-base sm:text-lg text-slate-500">Hz</span>`;
+                    els.cents.innerText = "+0.00 cents";
+                    els.stringGuide.classList.remove('opacity-100');
+                    els.stringGuide.classList.add('opacity-0');
+                    els.needle.className = 'absolute top-0 bottom-0 w-1.5 rounded-full z-10 needle-gray transition-all duration-500 ease-out';
+                    els.needle.style.left = "50%";
+                }
+            }
+
+            if (!window.requestAnimationFrame)
+                window.requestAnimationFrame = window.webkitRequestAnimationFrame;
+            rafId = window.requestAnimationFrame(updatePitch);
+        }
+
+        async function startTuning() {
+            try {
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                audioContext = new AudioContext();
+                
+                if (audioContext.state === 'suspended') {
+                    await audioContext.resume();
+                }
+
+                analyser = audioContext.createAnalyser();
+                analyser.fftSize = BUFF_SIZE;
+
+                // ミュート時の小音量増幅用ゲインノード
+                gainNode = audioContext.createGain();
+                gainNode.gain.value = isMuteMode ? 6.0 : 1.5;
+
+                // ダイナミクスコンプレッサー（弱音のブースト＆音量平均化）
+                compressorNode = audioContext.createDynamicsCompressor();
+                compressorNode.threshold.value = -50;
+                compressorNode.knee.value = 40;
+                compressorNode.ratio.value = 12;
+                compressorNode.attack.value = 0.003;
+                compressorNode.release.value = 0.25;
+
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } 
+                });
+                mediaStreamSource = audioContext.createMediaStreamSource(stream);
+
+                // オーディオグラフの接続: マイク -> ゲイン -> コンプレッサー -> アナライザー
+                mediaStreamSource.connect(gainNode);
+                gainNode.connect(compressorNode);
+                compressorNode.connect(analyser);
+
+                isPlaying = true;
+                lastPitchTime = Date.now();
+                updatePitch();
+                
+                els.toggleBtn.innerText = "Stop Tuning";
+                els.toggleBtn.classList.remove('bg-blue-600', 'hover:bg-blue-500', 'shadow-blue-900/25');
+                els.toggleBtn.classList.add('bg-slate-700', 'hover:bg-slate-600', 'shadow-none', 'text-slate-300');
+
+            } catch (err) {
+                showError("マイクへのアクセス権限が必要です。ブラウザまたはiPhoneの設定をご確認ください。");
+                console.error(err);
+            }
+        }
+
+        function stopTuning() {
+            isPlaying = false;
+            if (rafId) cancelAnimationFrame(rafId);
+            if (mediaStreamSource) mediaStreamSource.disconnect();
+            if (audioContext) audioContext.close();
+
+            els.toggleBtn.innerText = "Start Tuning";
+            els.toggleBtn.classList.remove('bg-slate-700', 'hover:bg-slate-600', 'shadow-none', 'text-slate-300');
+            els.toggleBtn.classList.add('bg-blue-600', 'hover:bg-blue-500', 'shadow-blue-900/25');
+            
+            els.note.innerHTML = "--";
+            els.note.className = 'text-4xl sm:text-5xl font-extrabold flex items-baseline transition-colors duration-300 glow-gray';
+            els.freq.innerHTML = `---.-- <span class="text-base sm:text-lg text-slate-500">Hz</span>`;
+            els.cents.innerText = "+0.00 cents";
+            els.stringGuide.classList.remove('opacity-100');
+            els.stringGuide.classList.add('opacity-0');
+            els.needle.style.left = "50%";
+            els.needle.className = 'absolute top-0 bottom-0 w-1.5 rounded-full z-10 needle-gray transition-all duration-500 ease-out';
+            drawWaveform();
+        }
+
+        els.toggleBtn.addEventListener('click', () => {
+            if (isPlaying) {
+                stopTuning();
+            } else {
+                startTuning();
+            }
+        });
+
+        function updateA4(val) {
+            let freq = parseFloat(val);
+            if (freq >= 410 && freq <= 470) {
+                a4Frequency = freq;
+                els.a4Slider.value = freq;
+                els.a4Input.value = freq;
+            }
+        }
+
+        els.a4Slider.addEventListener('input', (e) => updateA4(e.target.value));
+        els.a4Input.addEventListener('change', (e) => updateA4(e.target.value));
+
+        els.muteToggle.addEventListener('change', (e) => {
+            isMuteMode = e.target.checked;
+            if (gainNode) {
+                gainNode.gain.setValueAtTime(isMuteMode ? 6.0 : 1.5, audioContext.currentTime);
+            }
+        });
+
+        drawWaveform();
+    </script>
+</body>
+</html>
